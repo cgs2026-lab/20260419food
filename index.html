@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>학교 생활 대시보드</title>
+    <style>
+        :root {
+            --primary: #5c7cfa;
+            --bg: #f8f9fa;
+            --card: #ffffff;
+            --text: #343a40;
+            --text-light: #868e96;
+            --shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        }
+
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .dashboard {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .header { text-align: center; padding: 10px 0; }
+        .header h1 { margin: 0; font-size: 1.4rem; color: var(--primary); }
+
+        /* 컨트롤러 섹션 */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            background: #fff;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+        }
+
+        .input-group { display: flex; gap: 10px; }
+        
+        select, input[type="date"] {
+            flex: 1;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 10px;
+            font-family: inherit;
+            outline: none;
+        }
+
+        #date-display {
+            font-weight: 600;
+            color: var(--primary);
+            text-align: center;
+            font-size: 1.1rem;
+        }
+
+        .card { background: var(--card); border-radius: 20px; padding: 24px; box-shadow: var(--shadow); }
+        .card-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+
+        .weather-content { display: flex; justify-content: space-between; align-items: center; }
+        .temp { font-size: 2.2rem; font-weight: 800; margin: 0; }
+        .weather-icon { font-size: 3rem; }
+
+        .meal-list { background: #f1f3f5; padding: 15px; border-radius: 12px; line-height: 1.7; font-size: 1rem; min-height: 100px; }
+        .calorie { margin-top: 12px; font-size: 0.85rem; color: var(--text-light); text-align: right; }
+        
+        .error { color: #fa5252; text-align: center; }
+        .loading { color: var(--text-light); font-style: italic; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <div class="header"><h1>School Life Dashboard</h1></div>
+
+    <div class="controls">
+        <div class="input-group">
+            <select id="region-select">
+                <option value="37.3447,126.9683">의왕시</option>
+                <option value="37.5665,126.9780">서울특별시</option>
+                <option value="37.4563,126.7052">인천광역시</option>
+                <option value="35.1796,129.0756">부산광역시</option>
+                <option value="35.1595,126.8526">광주광역시</option>
+                <option value="36.3504,127.3845">대전광역시</option>
+            </select>
+            <input type="date" id="target-date">
+        </div>
+        <div id="date-display">날짜 선택 중...</div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">☀️ 실시간 날씨</div>
+        <div id="weather-result" class="weather-content"><p class="loading">불러오는 중...</p></div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">🍱 오늘의 급식</div>
+        <div id="meal-result"><div class="meal-list loading">불러오는 중...</div></div>
+    </div>
+</div>
+
+<script>
+    const dateInput = document.getElementById('target-date');
+    const dateDisplay = document.getElementById('date-display');
+    const regionSelect = document.getElementById('region-select');
+    const mealResult = document.getElementById('meal-result');
+    const weatherResult = document.getElementById('weather-result');
+
+    // 오늘 날짜 설정 및 표시
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.value = today;
+    
+    // 날짜 + 요일 표시 함수
+    function updateDateDisplay(dateStr) {
+        const date = new Date(dateStr);
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        const dayOfWeek = days[date.getDay()];
+        dateDisplay.innerText = `${date.getFullYear()}년 ${date.getMonth()+1}월 ${date.getDate()}일 (${dayOfWeek}요일)`;
+    }
+
+    // 1. 급식 정보 가져오기
+    async function fetchMeal(date) {
+        const formattedDate = date.replace(/-/g, '');
+        const apiURL = `https://open.neis.go.kr/hub/mealServiceDietInfo?ATPT_OFCDC_SC_CODE=J10&SD_SCHUL_CODE=7530553&MLSV_YMD=${formattedDate}`;
+
+        mealResult.innerHTML = '<div class="meal-list loading">메뉴 가져오는 중...</div>';
+        try {
+            const response = await fetch(apiURL);
+            const xmlDoc = new DOMParser().parseFromString(await response.text(), "text/xml");
+            const resultCode = xmlDoc.getElementsByTagName("CODE")[0]?.textContent;
+
+            if (resultCode === "INFO-000") {
+                const dishName = xmlDoc.getElementsByTagName("DDISH_NM")[0].textContent;
+                const calorie = xmlDoc.getElementsByTagName("CAL_INFO")[0].textContent;
+                const cleanDish = dishName.replace(/<br\/>/g, '<br>').replace(/\([^)]*\)/g, '').trim();
+                mealResult.innerHTML = `<div class="meal-list">${cleanDish}</div><div class="calorie">🔥 ${calorie}</div>`;
+            } else {
+                mealResult.innerHTML = '<div class="meal-list error">급식 정보가 없습니다.</div>';
+            }
+        } catch (e) { mealResult.innerHTML = '<div class="meal-list error">데이터 로드 실패</div>'; }
+    }
+
+    // 2. 날씨 정보 가져오기 (지역 선택 적용)
+    async function fetchWeather() {
+        const [lat, lon] = regionSelect.value.split(',');
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&timezone=Asia%2FSeoul`;
+
+        try {
+            const data = await (await fetch(url)).json();
+            const weather = data.current_weather;
+            const icons = { 0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️", 45: "🌫️", 61: "🌧️", 95: "⛈️" };
+            weatherResult.innerHTML = `
+                <div class="weather-info"><p class="temp">${weather.temperature}°C</p></div>
+                <div class="weather-icon">${icons[weather.weathercode] || "⛅"}</div>
+            `;
+        } catch (e) { weatherResult.innerHTML = '<p class="error">날씨 로드 실패</p>'; }
+    }
+
+    // 이벤트 리스너
+    dateInput.addEventListener('change', (e) => {
+        updateDateDisplay(e.target.value);
+        fetchMeal(e.target.value);
+    });
+    regionSelect.addEventListener('change', fetchWeather);
+
+    // 초기 실행
+    updateDateDisplay(today);
+    fetchMeal(today);
+    fetchWeather();
+</script>
+
+</body>
+</html>
